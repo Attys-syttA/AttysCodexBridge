@@ -96,10 +96,11 @@ const HELP_TOPICS: HelpTopic[] = [
     ],
   },
   {
-    title: "/restart és /stop — bot életciklus",
-    aliases: ["restart", "stop", "leallitas", "leállítás", "ujrainditas", "újraindítás"],
+    title: "/restart, /restart_profile és /stop — bot életciklus",
+    aliases: ["restart", "restart_profile", "restart_as", "stop", "leallitas", "leállítás", "ujrainditas", "újraindítás"],
     lines: [
       "/restart finoman újraindítja az AttysCodexBridge botot, de előtte megerősítést kér.",
+      "/restart_profile újraindítás előtt kiválasztja, milyen launcher jogosultsággal induljon vissza a bot.",
       "/stop csak az AttysCodexBridge botot állítja le, és szintén megerősítést kér.",
       "Futó Codex kérés közben egyik művelet sem indul el; előbb várj, vagy használd a /abort parancsot.",
       "Ezek a parancsok nem állítják le a Codex, VS Code vagy MCP folyamatokat.",
@@ -186,6 +187,7 @@ export function renderHelpMessage(): DualText {
         ["/watchdog", "Bridge állapotkép"],
         ["/notes", "Bot-saját operator jegyzet"],
         ["/restart", "Bot finom újraindítása"],
+        ["/restart_profile", "Restart választott launcher profillal"],
         ["/stop", "Bot leállítása"],
       ],
     },

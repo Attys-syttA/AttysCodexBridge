@@ -362,7 +362,7 @@ if (-not $pwsh) {
 }
 
 try {
-  $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launcherPath)
+  $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launcherPath, '-LaunchProfile', 'default')
   $started = Start-Process -FilePath $pwsh -ArgumentList $arguments -WorkingDirectory $RepoRoot -WindowStyle Hidden -PassThru
   $status.decision = 'restart_launched'
   $status.launcherPid = $started.Id

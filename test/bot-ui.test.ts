@@ -23,6 +23,7 @@ describe("bot-ui", () => {
       expect(plain).toContain("/launch_profiles");
       expect(plain).toContain("/handoff_to");
       expect(plain).toContain("/restart");
+      expect(plain).toContain("/restart_profile");
       expect(plain).toContain("/stop");
       expect(plain).toContain("/doctor");
       expect(plain).toContain("/git");
@@ -32,10 +33,10 @@ describe("bot-ui", () => {
       expect(plain).toContain("/notes");
     });
 
-    it("lists all 27 commands", () => {
+    it("lists all 28 commands", () => {
       const { plain } = renderHelpMessage();
       const commandMatches = plain.match(/\/\w+/g) ?? [];
-      expect(commandMatches.length).toBe(27);
+      expect(commandMatches.length).toBe(28);
     });
 
     it("returns valid HTML with bold tags", () => {
@@ -75,6 +76,7 @@ describe("bot-ui", () => {
     it("explains bot lifecycle commands", () => {
       const { plain } = renderHelpTopicMessage("restart");
       expect(plain).toContain("/restart");
+      expect(plain).toContain("/restart_profile");
       expect(plain).toContain("/stop");
       expect(plain).toContain("megerősítést kér");
     });

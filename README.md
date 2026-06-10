@@ -108,6 +108,9 @@ AttysCodexBridge can also be used in a multi-repo setup: one bot process can ser
 | `/logout` | Sign out of Codex |
 | `/voice` | Check voice transcription backend status |
 | `/notes` | Write a bot-owned operator note under `.telecodex/operator-notes` |
+| `/restart` | Restart the bot with the default launcher profile |
+| `/restart_profile` | Restart the bot with a selected launcher permission profile |
+| `/stop` | Stop the bot after confirmation |
 | `/handoff` | Button menu for handoff actions |
 | `/handback` | Print `codex resume <id>` for CLI handoff |
 | `/attach <id>` | Bind an existing Codex thread to this forum topic |
@@ -158,6 +161,24 @@ Per-turn token usage is hidden by default. Set `SHOW_TURN_TOKEN_USAGE=true` if y
 - `/launch_profiles` changes only future thread creation or reattachment in the current chat/topic context; it does not mutate an already active thread in place
 - Extra `danger-full-access` profiles are blocked unless `ENABLE_UNSAFE_LAUNCH_PROFILES=true`
 - Selecting a `danger-full-access` profile from Telegram requires an explicit confirmation step
+
+The local PowerShell launcher also asks which startup permission profile to use before it starts the bot. If no key is pressed, it falls back to the default `.env` profile after a short timeout:
+
+```powershell
+.\start-attyscodexbridge-workspace.ps1
+```
+
+For unattended starts, pass the launcher profile explicitly:
+
+```powershell
+.\start-attyscodexbridge-workspace.ps1 -LaunchProfile read-only
+.\start-attyscodexbridge-workspace.ps1 -LaunchProfile workspace-write
+.\start-attyscodexbridge-workspace.ps1 -LaunchProfile approval
+```
+
+The `full-access` launcher profile maps to `danger-full-access / on-request`. When selected from the local interactive menu, it requires typing `FULL ACCESS` before startup continues.
+
+From Telegram, use `/restart_profile` to pick one of those launcher profiles and restart the bot with it. Plain `/restart` keeps using the `default` launcher profile from `.env`.
 
 ## Multi-Session Architecture
 

@@ -46,10 +46,13 @@ import { findHandoffInboxRecord, removeHandoffInboxRecord } from "./handoff-inbo
 import { appendOperatorEvent, appendOperatorNote } from "./operator-log.js";
 import { buildOperatorPolicyPreamble } from "./operator-policy.js";
 import {
+  LAUNCHER_LAUNCH_PROFILES,
+  findLauncherLaunchProfile,
   requestGracefulBotShutdown,
   scheduleBotRestart,
   writeBotControlRequest,
   type BotControlAction,
+  type LauncherLaunchProfileId,
 } from "./process-control.js";
 import { formatGitStatusPlain, inspectRepo, type RepoDiagnostics } from "./repo-diagnostics.js";
 import { getRuntimeRoot } from "./runtime-paths.js";
@@ -75,6 +78,7 @@ type KeyboardItem = { label: string; callbackData: string };
 type PendingBotControlConfirmation = {
   action: BotControlAction;
   contextKey: TelegramContextKey;
+  launchProfileId?: LauncherLaunchProfileId;
   requestedBy?: string;
   expiresAt: number;
 };
@@ -1648,7 +1652,11 @@ export function createBot(
     });
   });
 
-  const requestBotControlConfirmation = async (ctx: Context, action: BotControlAction): Promise<void> => {
+  const requestBotControlConfirmation = async (
+    ctx: Context,
+    action: BotControlAction,
+    launchProfileId?: LauncherLaunchProfileId,
+  ): Promise<void> => {
     const contextKey = contextKeyFromCtx(ctx);
     if (!contextKey) {
       return;
@@ -1664,15 +1672,20 @@ export function createBot(
 
     const nonce = randomUUID();
     const requestedBy = getRequesterLabel(ctx);
+    const launchProfile = launchProfileId ? findLauncherLaunchProfile(launchProfileId) : undefined;
     pendingBotControlConfirmations.set(nonce, {
       action,
       contextKey,
+      ...(launchProfile ? { launchProfileId: launchProfile.id } : {}),
       ...(requestedBy ? { requestedBy } : {}),
       expiresAt: Date.now() + BOT_CONTROL_CONFIRM_TTL_MS,
     });
 
     const keyboard = new InlineKeyboard()
-      .text(action === "restart" ? "Restart megerősítése" : "Stop megerősítése", `botctl_${action}_yes:${nonce}`)
+      .text(
+        action === "restart" ? "Restart megerősítése" : "Stop megerősítése",
+        `botctl_${action}_yes:${nonce}`,
+      )
       .row()
       .text("Mégse", `botctl_${action}_no:${nonce}`);
     const lines = action === "restart"
@@ -1680,6 +1693,9 @@ export function createBot(
           "<b>Biztosan újraindítsam a botot?</b>",
           "",
           "A jelenlegi bot finoman leáll, majd a launcher újra elindítja.",
+          launchProfile
+            ? `Launcher profil: <code>${escapeHTML(launchProfile.label)}</code> (${escapeHTML(launchProfile.sandboxMode)} / ${escapeHTML(launchProfile.approvalPolicy)})${launchProfile.unsafe ? " ⚠️" : ""}`
+            : "Launcher profil: <code>Default from .env</code>",
           "Codex/MCP/VS Code folyamatokat nem állít le.",
         ]
       : [
@@ -1698,6 +1714,40 @@ export function createBot(
 
   bot.command("restart", async (ctx) => {
     await requestBotControlConfirmation(ctx, "restart");
+  });
+
+  bot.command(["restart_profile", "restart_as"], async (ctx) => {
+    const contextKey = contextKeyFromCtx(ctx);
+    if (!contextKey) {
+      return;
+    }
+
+    if (isBotControlBusy(contextKey)) {
+      const text = "Futó kérés közben nem indítom újra a botot. Várd meg, vagy használd a /abort parancsot.";
+      await safeReply(ctx, escapeHTML(text), { fallbackText: text });
+      return;
+    }
+
+    const buttons = LAUNCHER_LAUNCH_PROFILES.map((profile) => ({
+      label: `${profile.unsafe ? "⚠️ " : ""}${profile.label} · ${profile.sandboxMode} / ${profile.approvalPolicy}`,
+      callbackData: `restartprofile_${profile.id}`,
+    }));
+    const keyboard = paginateKeyboard(buttons, 0, "restartprofile");
+    const html = [
+      "<b>Bot restart launcher profillal</b>",
+      "",
+      "Válaszd ki, milyen jogosultsággal induljon újra az AttysCodexBridge bot:",
+    ].join("\n");
+    const plain = [
+      "Bot restart launcher profillal",
+      "",
+      "Válaszd ki, milyen jogosultsággal induljon újra az AttysCodexBridge bot:",
+    ].join("\n");
+
+    await safeReply(ctx, html, {
+      fallbackText: plain,
+      replyMarkup: keyboard,
+    });
   });
 
   bot.command("stop", async (ctx) => {
@@ -2215,13 +2265,14 @@ export function createBot(
     }
 
     try {
-      await writeBotControlRequest(config, action, pending.requestedBy);
+      const launchProfileId = action === "restart" ? pending.launchProfileId ?? "default" : undefined;
+      await writeBotControlRequest(config, action, pending.requestedBy, new Date(), launchProfileId);
       if (action === "restart") {
-        scheduleBotRestart();
+        scheduleBotRestart(process.cwd(), launchProfileId ?? "default");
       }
 
       const text = action === "restart"
-        ? "Restart indul. A bot pár másodpercre elhallgat, majd visszatér."
+        ? `Restart indul${launchProfileId ? ` (${launchProfileId})` : ""}. A bot pár másodpercre elhallgat, majd visszatér.`
         : "Stop indul. Csak az AttysCodexBridge bot áll le.";
       await ctx.answerCallbackQuery({ text: action === "restart" ? "Restart indul" : "Stop indul" });
       await safeEditMessage(bot, chatId, messageId, escapeHTML(text), { fallbackText: text });
@@ -2233,6 +2284,18 @@ export function createBot(
         fallbackText: message,
       });
     }
+  });
+
+  bot.callbackQuery(/^restartprofile_(default|read-only|workspace-write|approval|full-access)$/, async (ctx) => {
+    const profileId = ctx.match?.[1] as LauncherLaunchProfileId | undefined;
+    const profile = profileId ? findLauncherLaunchProfile(profileId) : undefined;
+    if (!profile) {
+      await ctx.answerCallbackQuery({ text: "Ismeretlen profil" });
+      return;
+    }
+
+    await ctx.answerCallbackQuery({ text: `${profile.label}` });
+    await requestBotControlConfirmation(ctx, "restart", profile.id);
   });
 
   bot.callbackQuery(/^commit_(yes|no):(.+)$/, async (ctx) => {
@@ -3192,6 +3255,7 @@ export async function registerCommands(bot: Bot<Context>): Promise<void> {
     { command: "notes", description: "Bot-saját operator jegyzet mentése" },
     { command: "commit", description: "Biztonságos commit-flow push nélkül" },
     { command: "restart", description: "Bot finom újraindítása megerősítéssel" },
+    { command: "restart_profile", description: "Bot restart választott launcher profillal" },
     { command: "stop", description: "Bot leállítása megerősítéssel" },
     { command: "handoff", description: "Handoff menü" },
     { command: "handback", description: "Szál visszaadása Codex CLI-nek" },

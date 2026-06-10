@@ -28,6 +28,23 @@ describe("process-control", () => {
     }
   });
 
+  it("writes the selected launcher profile for restart requests", async () => {
+    const stateDir = await mkdtemp(path.join(tmpdir(), "telecodex-control-"));
+    try {
+      const config = { stateDir, hostLabel: "test-host" } as TeleCodexConfig;
+      const now = new Date("2026-06-08T10:00:00.000Z");
+
+      const request = await writeBotControlRequest(config, "restart", "Tester (1)", now, "approval");
+      const raw = await readFile(path.join(stateDir, "restart-request.json"), "utf8");
+      const saved = JSON.parse(raw) as typeof request;
+
+      expect(saved.action).toBe("restart");
+      expect(saved.launchProfile).toBe("approval");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("writes a stop request with an expiry for the watchdog", async () => {
     const stateDir = await mkdtemp(path.join(tmpdir(), "telecodex-control-"));
     try {
