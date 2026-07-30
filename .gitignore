@@ -9,6 +9,7 @@ dist/
 
 # Runtime state
 .telecodex/
+.telecodex-worker/
 telecodex.log
 telecodex-run.log
 telecodex-run.err.log
